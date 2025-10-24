@@ -33,11 +33,12 @@ class AICompleter:
             except Exception:
                 self.client = None
     
-    def get_completion(self, text: str) -> Optional[str]:
+    def get_completion(self, text: str, timeout: float = 5.0) -> Optional[str]:
         """Get AI completion for given text.
         
         Args:
             text: Text to complete
+            timeout: Maximum time to wait for completion in seconds
             
         Returns:
             Completion string or None if unavailable
@@ -70,7 +71,8 @@ class AICompleter:
                 ],
                 max_tokens=self.config.max_tokens,
                 temperature=self.config.temperature,
-                stream=False
+                stream=False,
+                timeout=timeout
             )
             
             if response.choices and len(response.choices) > 0:
@@ -86,7 +88,7 @@ class AICompleter:
             return None
             
         except Exception as e:
-            # Silently fail on API errors
+            # Silently fail on API errors (including timeouts)
             return None
     
     def is_available(self) -> bool:

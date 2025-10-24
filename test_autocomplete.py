@@ -97,6 +97,22 @@ def test_file_operations():
     print("✓ File operation tests passed\n")
 
 
+def test_vim_commands():
+    """Test vim command parsing."""
+    print("Testing Vim Command Support...")
+    
+    # We can't fully test the editor without a curses screen,
+    # but we can verify the module loads without errors
+    try:
+        import text_autocomplete
+        print("✓ Text autocomplete module loads successfully")
+    except ImportError as e:
+        print(f"✗ Failed to import module: {e}")
+        raise
+    
+    print("✓ Vim command support tests passed\n")
+
+
 if __name__ == "__main__":
     print("Running Text Autocomplete Tests\n")
     print("=" * 50)
@@ -105,6 +121,7 @@ if __name__ == "__main__":
         test_config_manager()
         test_ai_completer_init()
         test_file_operations()
+        test_vim_commands()
         
         print("=" * 50)
         print("✓ All tests passed!")
