@@ -5,6 +5,7 @@ A TUI application similar to nano with GitHub Copilot-style word completion.
 import curses
 import time
 import os
+import threading
 from typing import List, Optional, Tuple
 from config_manager import Config
 from ai_completer import AICompleter
@@ -38,6 +39,8 @@ class TextEditor:
         self.ai_enabled = True
         self.requesting_completion = False
         self.last_completion_request = 0
+        self.completion_thread: Optional[threading.Thread] = None
+        self.pending_suggestion: Optional[str] = None
         
         # Display state
         self.modified = False
@@ -159,6 +162,15 @@ class TextEditor:
         
         return context
     
+    def _fetch_completion_async(self, context: str):
+        """Fetch AI completion in background thread."""
+        try:
+            completion = self.ai_completer.get_completion(context, timeout=3.0)
+            if completion:
+                self.pending_suggestion = completion
+        finally:
+            self.requesting_completion = False
+    
     def request_ai_completion(self):
         """Request AI completion based on current context."""
         if not self.ai_enabled or not self.ai_completer.is_available():
@@ -176,18 +188,17 @@ class TextEditor:
         if not context.strip():
             return
         
-        # Request completion (synchronous but throttled with short timeout)
+        # Request completion asynchronously to avoid blocking UI
         self.requesting_completion = True
         self.last_completion_request = current_time
         
-        try:
-            # Use shorter timeout to reduce blocking
-            completion = self.ai_completer.get_completion(context, timeout=3.0)
-            if completion:
-                self.suggestion = completion
-                self.suggestion_match_pos = 0
-        finally:
-            self.requesting_completion = False
+        # Start background thread for AI completion
+        self.completion_thread = threading.Thread(
+            target=self._fetch_completion_async,
+            args=(context,),
+            daemon=True
+        )
+        self.completion_thread.start()
     
     def check_suggestion_match(self, char: str):
         """Check if typed character matches suggestion.
@@ -228,6 +239,35 @@ class TextEditor:
         self.cursor_x += len(remaining)
         self.modified = True
         
+        # Handle line wrapping if needed
+        while len(self.lines[self.cursor_y]) >= self.width and self.cursor_x >= self.width - 1:
+            line = self.lines[self.cursor_y]
+            # Find wrap position (prefer word boundaries)
+            wrap_pos = self.width - 1
+            space_pos = line.rfind(' ', 0, wrap_pos)
+            if space_pos > wrap_pos - 20:  # Use word boundary if close enough
+                wrap_pos = space_pos + 1
+            
+            # Split line
+            before = line[:wrap_pos]
+            after = line[wrap_pos:]
+            self.lines[self.cursor_y] = before
+            
+            # Insert or update next line
+            if self.cursor_y + 1 < len(self.lines):
+                # Prepend to next line if it exists
+                self.lines[self.cursor_y + 1] = after + self.lines[self.cursor_y + 1]
+            else:
+                # Create new line
+                self.lines.insert(self.cursor_y + 1, after)
+            
+            # Move cursor if it was in wrapped portion
+            if self.cursor_x >= wrap_pos:
+                self.cursor_y += 1
+                self.cursor_x = self.cursor_x - wrap_pos
+            else:
+                break
+        
         # Clear suggestion
         self.suggestion = ""
         self.suggestion_match_pos = 0
@@ -243,6 +283,25 @@ class TextEditor:
         self.lines[self.cursor_y] = new_line
         self.cursor_x += 1
         self.modified = True
+        
+        # Auto-wrap if line exceeds terminal width
+        if len(new_line) >= self.width and self.cursor_x >= self.width - 1:
+            # Find last space before cursor for word wrapping
+            wrap_pos = self.cursor_x
+            space_pos = new_line.rfind(' ', 0, self.cursor_x)
+            if space_pos > 0 and (self.cursor_x - space_pos) < 20:  # Wrap at word boundary if reasonable
+                wrap_pos = space_pos + 1
+            elif self.cursor_x >= self.width - 1:  # Force wrap at cursor if at edge
+                wrap_pos = self.width - 1
+            
+            # Split line at wrap position
+            if wrap_pos < len(new_line):
+                before = new_line[:wrap_pos]
+                after = new_line[wrap_pos:]
+                self.lines[self.cursor_y] = before
+                self.lines.insert(self.cursor_y + 1, after)
+                self.cursor_y += 1
+                self.cursor_x = len(after) if self.cursor_x >= wrap_pos else 0
         
         # Check if char matches suggestion
         self.check_suggestion_match(char)
@@ -445,6 +504,12 @@ class TextEditor:
                 # Check exit request timeout (3 seconds)
                 if self.exit_requested and time.time() - self.exit_request_time > 3:
                     self.exit_requested = False
+                
+                # Check for pending AI suggestion from background thread
+                if self.pending_suggestion is not None:
+                    self.suggestion = self.pending_suggestion
+                    self.suggestion_match_pos = 0
+                    self.pending_suggestion = None
                 
                 # Check if we should request AI completion
                 if self.ai_enabled and not self.suggestion and not self.requesting_completion:
