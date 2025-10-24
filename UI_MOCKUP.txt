@@ -1,0 +1,114 @@
+TEXT AUTOCOMPLETE - UI MOCKUP
+================================================================================
+
+This is what the application looks like when running in a terminal:
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ The quick brown fox jumps over the lazy dog.                                │
+│                                                                              │
+│ I really enjoy writing small programs in Python.                            │
+│                                                                              │  
+│ Today I'm working on a text editor that|                                    │
+│                                          ╰─ Cursor position                  │
+│                                                                              │
+│ (After pause, ghost text appears in dim cyan:)                              │
+│ Today I'm working on a text editor that has AI-powered autocomplete         │
+│                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^        │
+│                                          Ghost text suggestion               │
+│                                                                              │
+│ (Press Tab or → to accept the suggestion)                                   │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│ [... more text lines ...]                                                   │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ myfile.txt | Line 5/20 Col 41 | AI: Enabled                                 │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ File saved successfully                                                      │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ ^S Save | ^O Open | ^X Exit | ^G Toggle AI | Tab/→ Accept                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+KEY FEATURES SHOWN:
+===================
+
+1. NANO-LIKE INTERFACE
+   - Clean text editing area at the top
+   - Status bar showing file info and position
+   - Message area for user feedback
+   - Help bar at the bottom with keyboard shortcuts
+
+2. GHOST TEXT DISPLAY
+   - AI suggestions appear in dim cyan color
+   - Positioned right after the cursor
+   - Non-intrusive and easy to distinguish from real text
+
+3. STATUS INFORMATION
+   - Current filename or [No Name]
+   - Line and column numbers
+   - AI status (Enabled/Disabled/Not Configured)
+   - Modified indicator when file has changes
+
+4. INTERACTIVE WORKFLOW
+   
+   Step 1: User types
+   ┌─────────────────────────────────────┐
+   │ The weather is|                     │
+   └─────────────────────────────────────┘
+   
+   Step 2: After 200ms pause, AI suggests
+   ┌─────────────────────────────────────┐
+   │ The weather is very nice today      │
+   │               ^^^^^^^^^^^^^^^       │
+   │               (ghost text)          │
+   └─────────────────────────────────────┘
+   
+   Step 3: User presses Tab to accept
+   ┌─────────────────────────────────────┐
+   │ The weather is very nice today|     │
+   │                               ^     │
+   │                            (accepted)│
+   └─────────────────────────────────────┘
+   
+   Step 4: OR user continues typing
+   ┌─────────────────────────────────────┐
+   │ The weather is b|                   │
+   │                                     │
+   │ (if 'b' doesn't match suggestion    │
+   │  ghost text disappears and new      │
+   │  suggestion is requested)           │
+   └─────────────────────────────────────┘
+
+5. SMART SUGGESTION MATCHING
+   
+   If suggestion is: "beautiful day"
+   And user types:   "b" ✓ matches → keeps suggestion
+                     "e" ✓ matches → keeps suggestion
+                     "a" ✓ matches → keeps suggestion
+                     "x" ✗ doesn't match → clears and refreshes
+
+COLORS:
+=======
+- Regular text:    White/Default terminal color
+- Ghost text:      Dim Cyan (non-intrusive)
+- Status bar:      Black on White (inverted)
+- Help text:       Yellow
+- Messages:        Yellow
+
+KEYBOARD CONTROLS:
+==================
+Ctrl+S    Save current file
+Ctrl+O    Open a file (prompts for filename)
+Ctrl+X    Exit the editor
+Ctrl+G    Toggle AI autocomplete on/off
+Tab       Accept AI suggestion
+→         Accept AI suggestion (or move cursor if no suggestion)
+←↑↓→      Navigate text
+Backspace Delete character
+Enter     New line
+
+This provides a familiar, efficient editing experience with powerful AI assistance!
