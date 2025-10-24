@@ -37,11 +37,20 @@ class TextEditor:
         self.last_input_time = 0
         self.ai_enabled = True
         self.requesting_completion = False
+        self.last_completion_request = 0
         
         # Display state
         self.modified = False
         self.status_message = ""
         self.status_message_time = 0
+        
+        # Vim-like command mode
+        self.vim_command_mode = False
+        self.vim_command = ""
+        
+        # Exit confirmation
+        self.exit_requested = False
+        self.exit_request_time = 0
         
         # Screen dimensions
         self.height, self.width = stdscr.getmaxyx()
@@ -84,21 +93,26 @@ class TextEditor:
         
         Args:
             filename: Path to save to (uses self.filename if None)
+        
+        Returns:
+            True if save successful, False otherwise
         """
         if filename:
             self.filename = filename
         
         if not self.filename:
-            self.set_status("No filename specified")
-            return
+            # Prompt for filename
+            self.filename = "untitled.txt"
         
         try:
             with open(self.filename, 'w') as f:
                 f.write('\n'.join(self.lines))
             self.modified = False
             self.set_status(f"Saved to {self.filename}")
+            return True
         except IOError as e:
             self.set_status(f"Error saving file: {e}")
+            return False
     
     def set_status(self, message: str):
         """Set status message.
@@ -153,19 +167,27 @@ class TextEditor:
         if self.requesting_completion:
             return
         
+        # Throttle requests to avoid too frequent API calls
+        current_time = time.time()
+        if current_time - self.last_completion_request < 1.0:  # Minimum 1 second between requests
+            return
+        
         context = self.get_context_before_cursor()
         if not context.strip():
             return
         
-        # Non-blocking request (in a real implementation, this would be async)
-        # For simplicity, we'll do it synchronously with short timeout
+        # Request completion (synchronous but throttled with short timeout)
         self.requesting_completion = True
-        completion = self.ai_completer.get_completion(context)
-        self.requesting_completion = False
+        self.last_completion_request = current_time
         
-        if completion:
-            self.suggestion = completion
-            self.suggestion_match_pos = 0
+        try:
+            # Use shorter timeout to reduce blocking
+            completion = self.ai_completer.get_completion(context, timeout=3.0)
+            if completion:
+                self.suggestion = completion
+                self.suggestion_match_pos = 0
+        finally:
+            self.requesting_completion = False
     
     def check_suggestion_match(self, char: str):
         """Check if typed character matches suggestion.
@@ -365,7 +387,10 @@ class TextEditor:
         
         # Draw help line
         help_y = self.height - 1
-        help_text = "^S Save | ^O Open | ^X Exit | ^G Toggle AI | Tab/→ Accept"
+        if self.vim_command_mode:
+            help_text = f":{self.vim_command}_  (Enter to execute, ESC to cancel)"
+        else:
+            help_text = "^S Save | ^X Exit | :w :q :wq | ^G Toggle AI | Tab/→ Accept"
         help_text = help_text[:self.width - 1]
         try:
             self.stdscr.addstr(help_y, 0, help_text, curses.color_pair(3))
@@ -382,12 +407,45 @@ class TextEditor:
         
         self.stdscr.refresh()
     
+    def execute_vim_command(self, command: str):
+        """Execute a vim-like command.
+        
+        Args:
+            command: Command string (without the leading :)
+        """
+        command = command.strip()
+        
+        if command == "w" or command == "write":
+            # Save file
+            self.save_file()
+        elif command == "q" or command == "quit":
+            # Quit if no modifications
+            if self.modified:
+                self.set_status("Unsaved changes! Use :q! to force quit or :wq to save and quit")
+            else:
+                return False  # Exit
+        elif command == "q!" or command == "quit!":
+            # Force quit without saving
+            return False  # Exit
+        elif command == "wq" or command == "x":
+            # Save and quit
+            if self.save_file():
+                return False  # Exit
+        else:
+            self.set_status(f"Unknown command: :{command}")
+        
+        return True  # Continue running
+    
     def handle_input(self):
         """Handle keyboard input."""
         try:
             key = self.stdscr.getch()
             
             if key == -1:  # No input
+                # Check exit request timeout (3 seconds)
+                if self.exit_requested and time.time() - self.exit_request_time > 3:
+                    self.exit_requested = False
+                
                 # Check if we should request AI completion
                 if self.ai_enabled and not self.suggestion and not self.requesting_completion:
                     current_time = time.time()
@@ -397,16 +455,59 @@ class TextEditor:
                             self.request_ai_completion()
                 return True
             
+            # Handle vim command mode
+            if self.vim_command_mode:
+                if key == 27:  # ESC - cancel command mode
+                    self.vim_command_mode = False
+                    self.vim_command = ""
+                    self.set_status("")
+                elif key in (curses.KEY_ENTER, 10, 13):  # Enter - execute command
+                    self.vim_command_mode = False
+                    result = self.execute_vim_command(self.vim_command)
+                    self.vim_command = ""
+                    if not result:
+                        return False  # Exit requested
+                elif key in (curses.KEY_BACKSPACE, 127, 8):  # Backspace
+                    if len(self.vim_command) > 0:
+                        self.vim_command = self.vim_command[:-1]
+                    else:
+                        self.vim_command_mode = False
+                        self.set_status("")
+                elif 32 <= key <= 126:  # Printable character
+                    self.vim_command += chr(key)
+                
+                # Update status to show current command
+                if self.vim_command_mode:
+                    self.set_status(f":{self.vim_command}")
+                return True
+            
+            # Check for vim command mode trigger
+            if key == ord(':'):
+                # Only enter command mode if at start of line and line is empty
+                current_line = self.get_current_line()
+                if self.cursor_x == 0 and not current_line:
+                    self.vim_command_mode = True
+                    self.vim_command = ""
+                    self.set_status(":")
+                    return True
+                else:
+                    # Otherwise treat as regular character
+                    self.insert_char(':')
+                    return True
+            
             # Ctrl+X - Exit
             if key == 24:  # Ctrl+X
-                if self.modified:
-                    self.set_status("Save changes? (^S to save, ^X again to exit)")
+                if self.modified and not self.exit_requested:
+                    self.exit_requested = True
+                    self.exit_request_time = time.time()
+                    self.set_status("Unsaved changes! Press ^X again to force exit or ^S to save")
                     return True
                 return False
             
             # Ctrl+S - Save
             elif key == 19:  # Ctrl+S
                 self.save_file()
+                self.exit_requested = False  # Reset exit request after saving
             
             # Ctrl+O - Open
             elif key == 15:  # Ctrl+O
@@ -468,8 +569,8 @@ class TextEditor:
             
             self.draw()
             
-            # Small delay to reduce CPU usage
-            time.sleep(0.01)
+            # Small delay to reduce CPU usage (20ms = 50 FPS max)
+            time.sleep(0.02)
 
 
 def main(stdscr, filename: Optional[str] = None):

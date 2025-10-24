@@ -58,12 +58,20 @@ python text_autocomplete.py filename.txt
 
 ## Keyboard Controls
 
+### Standard Controls
 - **Arrow Keys**: Move cursor
 - **Tab / Right Arrow**: Accept AI suggestion
 - **Ctrl+S**: Save file
 - **Ctrl+O**: Open file
-- **Ctrl+X**: Exit
+- **Ctrl+X**: Exit (press twice if there are unsaved changes)
 - **Ctrl+G**: Toggle AI autocomplete on/off
+
+### Vim-like Commands
+Type `:` at the beginning of an empty line to enter command mode:
+- **:w** or **:write**: Save file
+- **:q** or **:quit**: Quit (warns if unsaved changes)
+- **:q!** or **:quit!**: Force quit without saving
+- **:wq** or **:x**: Save and quit
 
 ## How It Works
 
@@ -81,6 +89,13 @@ python text_autocomplete.py filename.txt
 - `max_tokens`: Maximum tokens for completion (controls suggestion length)
 - `temperature`: Creativity of suggestions (0.0-1.0)
 - `pause_delay_ms`: Milliseconds to wait before requesting suggestions
+
+## Performance Optimizations
+
+The editor includes several performance optimizations:
+- **Request Throttling**: Minimum 1 second between AI completion requests
+- **Request Timeout**: 3 second timeout for AI requests to prevent blocking
+- **Efficient Rendering**: 50 FPS maximum refresh rate for smooth operation
 
 ## Requirements
 
